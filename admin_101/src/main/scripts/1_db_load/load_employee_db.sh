@@ -7,7 +7,7 @@ cd `dirname $0`
 
 mysql -uroot < mysql_user_create.sh
 
-cd ../../employees_db
+cd ../../../../data/employees_db
 
 # Create User for Database
 

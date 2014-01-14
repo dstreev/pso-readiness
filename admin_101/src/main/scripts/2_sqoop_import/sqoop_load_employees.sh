@@ -17,7 +17,7 @@ hdfs dfs -rm -r ./departments
 sqoop import --connect jdbc:mysql://pm2.hwx.test/employees --username $USERNAME --password $PASSWORD --table departments -m 1
 
 # Load to a specific directory. '|' separated (--fields-terminated-by) NOTE the escape char (\)
-hdfs dfs -rm -r ./employee_db 
+hdfs dfs -rm -r -skipTrash ./employee_db
 
 for i in departments dept_manager titles; do
 sqoop import --fields-terminated-by \| --connect jdbc:mysql://pm2.hwx.test/employees --username $USERNAME --password $PASSWORD --table $i -m 1 -target-dir ./employee_db/$i
