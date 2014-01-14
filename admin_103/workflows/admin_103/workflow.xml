@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<workflow-app xmlns="uri:oozie:workflow:0.4"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+
+              xsi:schemaLocation="uri:oozie:workflow:0.4 http://oozie.apache.org/schemas/workflow-0.4
+    uri:oozie:hive-action:0.5  http://oozie.apache.org/schemas/hive-action-0.5
+    uri:oozie:email-action:0.1 http://oozie.apache.org/schemas/email-action-0.1
+    uri:oozie:sqoop-action:0.4 http://oozie.apache.org/schemas/sqoop-action-0.4
+    uri:oozie:shell-action:0.3 http://oozie.apache.org/schemas/shell-action-0.3
+    uri:oozie:ssh-action:0.2 http://oozie.apache.org/schemas/ssh-action-0.2
+    uri:oozie:sla:0.2 http://oozie.apache.org/schemas/sla-0.2"
+              name="workflow">
+
+    <!--
+       Sqoop two tables.
+       Hive Staging to Orc.
+       Email
+    -->
+    <start to="db-setup"/>
+
+    <action name="db-setup">
+        <hive xmlns="uri:oozie:hive-action:0.5">
+            <job-tracker>${jobtracker}</job-tracker>
+            <name-node>${namenode}</name-node>
+            <job-xml>${hive_site_reference}</job-xml>
+
+            <script>hive/db-setup.ddl</script>
+            <param>DATABASE=${database}</param>
+            <param>STATES_DIR=${states_import_dir}</param>
+            <param>USERS_DIR=${users_import_dir}</param>
+        </hive>
+        <ok to="sqoop-me"/>
+        <error to="setup-issue"/>
+    </action>
+
+    <fork name="sqoop-me">
+        <path start="sqoop-users"/>
+        <path start="sqoop-states"/>
+    </fork>
+
+    <action name="sqoop-users">
+        <sqoop xmlns="uri:oozie:sqoop-action:0.4">
+            <job-tracker>${jobtracker}</job-tracker>
+            <name-node>${namenode}</name-node>
+            <prepare>
+                <delete path="hdfs://${users_import_dir}"/>
+            </prepare>
+            <arg>import</arg>
+            <arg>--connect</arg>
+            <arg>${jdbc_url}</arg>
+            <arg>--username</arg>
+            <arg>${db_user}</arg>
+            <arg>--password</arg>
+            <arg> </arg>
+            <arg>--table</arg>
+            <arg>${users_table}</arg>
+            <arg>--direct</arg>
+            <arg>-m</arg>
+            <arg>1</arg>
+            <arg>--target-dir</arg>
+            <arg>${users_import_dir}</arg>
+        </sqoop>
+        <ok to="sqoop-out"/>
+        <error to="import-issue"/>
+    </action>
+
+    <action name="sqoop-states">
+        <sqoop xmlns="uri:oozie:sqoop-action:0.4">
+            <job-tracker>${jobtracker}</job-tracker>
+            <name-node>${namenode}</name-node>
+            <prepare>
+                <delete path="hdfs://${states_import_dir}"/>
+            </prepare>
+            <arg>import</arg>
+            <arg>--connect</arg>
+            <arg>${jdbc_url}</arg>
+            <arg>--username</arg>
+            <arg>${db_user}</arg>
+            <arg>--password</arg>
+            <arg> </arg>
+            <arg>--table</arg>
+            <arg>${states_table}</arg>
+            <arg>--direct</arg>
+            <arg>-m</arg>
+            <arg>1</arg>
+            <arg>--target-dir</arg>
+            <arg>${states_import_dir}</arg>
+        </sqoop>
+        <ok to="sqoop-out"/>
+        <error to="import-issue"/>
+    </action>
+
+    <join name="sqoop-out" to="load-it"/>
+
+    <fork name="load-it">
+        <path start="load-users"/>
+        <path start="load-states"/>
+    </fork>
+
+    <action name="load-users">
+        <hive xmlns="uri:oozie:hive-action:0.5">
+            <job-tracker>${jobtracker}</job-tracker>
+            <name-node>${namenode}</name-node>
+            <job-xml>${hive_site_reference}</job-xml>
+
+            <script>hive/load-it.sql</script>
+            <param>database=${database}</param>
+            <param>entity=users</param>
+
+        </hive>
+        <ok to="load-out"/>
+        <error to="load-issue"/>
+    </action>
+
+    <action name="load-states">
+        <hive xmlns="uri:oozie:hive-action:0.5">
+            <job-tracker>${jobtracker}</job-tracker>
+            <name-node>${namenode}</name-node>
+            <job-xml>${hive_site_reference}</job-xml>
+
+            <script>hive/load-it.sql</script>
+            <param>database=${database}</param>
+            <param>entity=states</param>
+
+        </hive>
+        <ok to="load-out"/>
+        <error to="load-issue"/>
+    </action>
+
+    <join name="load-out" to="success-email"/>
+
+    <action name="success-email">
+        <email xmlns="uri:oozie:email-action:0.1">
+            <!-- Requires mail configurations in oozie-site.xml
+                oozie.email.smtp.host= (localhost by default)
+                oozie.email.from.address= (oozie@localhost by default)
+                oozie.email.smtp.auth= (false default, set to true if smtp request auth)
+                    (for auth) oozie.email.smtp.username=
+                               oozie.email.smtp.password=
+            -->
+            <to>${email_to}</to>
+            <subject>Load Complete</subject>
+            <body></body>
+        </email>
+        <ok to="done"/>
+        <error to="done"/>
+    </action>
+
+    <action name="setup-issue">
+        <email xmlns="uri:oozie:email-action:0.1">
+            <to>${email_to}</to>
+            <subject>Setup Failure</subject>
+            <body>"Workflow Failed: message[${wf:errorMessage(wf:lastErrorNode())}]"</body>
+        </email>
+        <ok to="kill"/>
+        <error to="kill"/>
+    </action>
+    <action name="import-issue">
+        <email xmlns="uri:oozie:email-action:0.1">
+            <to>${email_to}</to>
+            <subject>Setup Failure</subject>
+            <body>"Workflow Failed: message[${wf:errorMessage(wf:lastErrorNode())}]"</body>
+        </email>
+        <ok to="kill"/>
+        <error to="kill"/>
+    </action>
+    <action name="load-issue">
+        <email xmlns="uri:oozie:email-action:0.1">
+            <to>${email_to}</to>
+            <subject>Setup Failure</subject>
+            <body>"Workflow Failed: message[${wf:errorMessage(wf:lastErrorNode())}]"</body>
+        </email>
+        <ok to="kill"/>
+        <error to="kill"/>
+    </action>
+
+    <kill name="kill">
+        <message>Job Terminated</message>
+    </kill>
+
+    <end name="done"/>
+</workflow-app>

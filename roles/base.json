@@ -1,0 +1,52 @@
+{
+  "name": "base",
+  "chef_type": "role",
+  "json_class": "Chef::Role",
+  "description": "This is the base role",
+  "default_attributes": {
+    "hostentries": [
+      {"ipaddress":"192.168.90.6", "hostname":"repo.hwx.test"}
+    ],
+    "hdp-prep": {
+    	"ssh": {
+    		"user":"vagrant"
+    	},
+    	"local-repo": {
+    		"use": false,
+    		"url": "http://repo.hwx.test/repos"
+    	}
+    },
+  	"java": {
+  		"install_flavor":"oracle",
+    	"oracle": {
+       		"accept_oracle_download_terms": true
+     	},
+     	"jdk_version": "7",
+     	"jdk": {
+     		"7": {
+     			"x86_64": {
+   			"_comment": "This assumes a local repo box matching the 'hostentry' above and with the jdk archive downloaded to it for local retrieval",
+     				"url": "http://repo.hwx.test/repos/artifacts/jdk-7u45-linux-x64.tar.gz"
+     			}
+     		}
+     	}	
+   	},
+   	"tomcat": {
+   		"7": {
+   			"_comment": "This assumes a local repo box matching the 'hostentry' above and with the jdk archive downloaded to it for local retrieval",
+   			"url": "http://repo.hwx.test/repos/artifacts/apache-tomcat-7.0.42.tar.gz"
+   		},
+   		"http_port": 8081
+   	}
+  },
+  "override_attributes": {
+  	"tomcat": {
+  		"jvm_opts": ["-Xmx1536m","-Djava.awt.headless=true"]
+  	}
+  },
+  "run_list": [
+  	"recipe[host-entry]",
+  	"recipe[hdp-prep]"
+  ]
+  
+}
